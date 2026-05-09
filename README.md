@@ -1,6 +1,6 @@
 # Primitives
 
-A showcase of small, self-contained TypeScript primitives — each one a focused exercise in spec-first design, TDD discipline, and the kind of decisions that only show up when you write the tests before the code.
+A showcase of small, self-contained TypeScript and Python primitives — each one a focused exercise in spec-first design, TDD discipline, and the kind of decisions that only show up when you write the tests before the code.
 
 Every primitive is independent: its own `package.json`, its own lockfile, its own `node_modules`. There is no monorepo tooling. Pick one, `cd` in, and read the spec.
 
