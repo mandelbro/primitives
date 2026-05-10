@@ -1,5 +1,9 @@
 import type { JwtAuthOptions, RequestHandler } from './types.js';
+import { validateOptions } from './validate-options.js';
 
-export function jwtAuth(_opts: JwtAuthOptions): RequestHandler {
-  throw new Error('jwtAuth: not implemented');
+export function jwtAuth(opts: JwtAuthOptions): RequestHandler {
+  validateOptions(opts);
+  return (_req, res, _next) => {
+    res.status(500).end();
+  };
 }
