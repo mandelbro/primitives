@@ -1,0 +1,5 @@
+node_modules
+dist
+.claude/tdd-state.json
+.claude/tdd-state.json.tmp
+.claude/tdd-state.archive/
