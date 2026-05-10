@@ -9,7 +9,7 @@ Every primitive is independent: its own `package.json`, its own lockfile, its ow
 | # | Primitive | Summary |
 |---|---|---|
 | 01 | [Rate Limiter](01-rate-limiter/) | In-memory token-bucket rate limiter. Discriminated-union returns, lazy refill, clock injection, no runtime deps. |
-| 03 | Idempotency Middleware | _(placeholder — not yet started)_ |
+| 03 | [Idempotency Middleware](03-idempotency-middleware/) | Express middleware for the `Idempotency-Key` header: scoped per-tenant, fingerprint-keyed cache, verbatim replay on retry, 422 on payload mismatch. |
 | 04 | [API Client Retry & Backoff](04-api-client-retry-backoff/) | `fetchWithRetry`: retries with exponential backoff, `Retry-After` honoring, `AbortSignal` end-to-end, no runtime deps. |
 | 05 | [MCP Tool Definition](05-mcp-tool-definition/) | `registerSearchTool`: wraps a Vector DB search endpoint as an MCP tool an LLM agent can call. |
 
