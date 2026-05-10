@@ -14,6 +14,7 @@ Always `cd` into the specific primitive directory before running commands.
 | `03-idempotency-middleware/` | Empty placeholder — primitive not yet started |
 | `04-api-client-retry-backoff/` | `fetchWithRetry` wrapper: retries, exponential backoff, `Retry-After`, `AbortSignal` (no runtime deps) |
 | `05-mcp-tool-definition/` | `registerSearchTool` — wraps a Vector DB search endpoint as an MCP tool. Uses `@modelcontextprotocol/sdk` + `zod` |
+| `06-jwt-jwks-validation/` | `jwtAuth` + `requireScope` — Express middleware that validates RS256 JWTs against a JWKS endpoint. Uses `jose`; `express` peerDep |
 
 ## Common commands (run inside a primitive directory)
 
@@ -83,6 +84,17 @@ These are non-obvious decisions that exist for a reason. Don't undo them without
 - The SDK boundary owns embedding — the tool wrapper never sees vectors.
 - Upstream errors are signaled by throwing `UpstreamError(status, message)` from the injected `VectorDbClient`; the wrapper translates these into the agent-facing error envelope (e.g. 404 → `NOT_FOUND`).
 - Input validation via `zod`.
+
+**`06-jwt-jwks-validation`**
+- Public API: `jwtAuth(opts) → RequestHandler` and `requireScope(scope) → RequestHandler`. Each call to `jwtAuth(opts)` instantiates its own `JwksCache`; mount once per `jwksUri` and share across routes.
+- RS256 hard-pinned. The header pre-decode in `decode-header.ts` rejects `alg !== 'RS256'` before signature verify and claim validation; `jose.jwtVerify` is also called with `algorithms: ['RS256']` (belt-and-suspenders). Pipeline ordering observable via the B1 test.
+- Empty signature segment (`header.payload.`) is structurally valid so `alg=none` reaches the alg check rather than failing as "malformed."
+- Cache is single-flight per instance: `inFlight` slot cleared in `.finally(() => { this.inFlight = null })` — clearing on **reject** is essential, otherwise one transient endpoint failure poisons the cache. Regression-tested by D4.
+- Refresh **replaces** the entries map, never merges. Keys retired upstream become unresolvable on the next refresh; this is the §13 rotation guarantee.
+- Skew boundaries inherit jose v5's asymmetric semantics: `exp <= now − tolerance` → expired (boundary exclusive), `nbf > now + tolerance` → not yet valid (boundary inclusive). Don't paper this over.
+- Missing-creds 401 follows RFC 6750 §3 strict mode: `WWW-Authenticate: Bearer realm="…"` with no `error=` parameter. Error codes are reserved for credentials that were presented and rejected.
+- Programmer errors (`requireScope` without `jwtAuth`, double-mounted `jwtAuth`) **throw** rather than returning 4xx — they're wiring bugs that should surface to Express's error handler.
+- `now` and `fetcher` are constructor-time DI options matching the `01-rate-limiter` pattern.
 
 ## File organization rules (apply within each primitive)
 
