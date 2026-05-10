@@ -1,6 +1,7 @@
-import type { Request, RequestHandler, Response } from 'express';
+import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { createHash } from 'node:crypto';
 
+// Module augmentation: callers wire `req.rawBody` via `express.json({ verify })`.
 declare module 'http' {
   interface IncomingMessage {
     rawBody?: Buffer | Uint8Array;
@@ -14,7 +15,6 @@ declare module 'express-serve-static-core' {
 }
 
 export type Clock = () => number;
-
 export type ScopeFn = (req: Request) => string;
 
 export interface CachedResponse {
@@ -46,6 +46,15 @@ const DEFAULT_TRACKED_METHODS: ReadonlySet<string> = new Set([
   'DELETE',
 ]);
 
+/** Construction-time-resolved options captured by the middleware closure. */
+interface ResolvedOptions {
+  readonly store: Store;
+  readonly scope: ScopeFn;
+  readonly ttlMs: number;
+  readonly clock: Clock;
+  readonly trackedMethods: ReadonlySet<string>;
+}
+
 export function createIdempotencyMiddleware(
   opts: IdempotencyOptions,
 ): RequestHandler {
@@ -73,59 +82,85 @@ export function createIdempotencyMiddleware(
     throw new TypeError('IdempotencyOptions.clock must be a function');
   }
 
-  const trackedMethods =
-    opts.trackedMethods === undefined
-      ? DEFAULT_TRACKED_METHODS
-      : normalizeTrackedMethods(opts.trackedMethods);
-
-  const ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS;
-  const clock: Clock = opts.clock ?? Date.now;
-  const store = opts.store;
-  const scope = opts.scope;
-
-  return (req, res, next) => {
-    if (!trackedMethods.has(req.method)) {
-      next();
-      return;
-    }
-    const key = extractIdempotencyKey(req);
-    if (key === null) {
-      next();
-      return;
-    }
-    const cacheKey = `${scope(req)}:${key}`;
-    const fingerprint = computeFingerprint(req);
-
-    store.get(cacheKey, clock()).then(
-      (cached) => {
-        if (cached !== null) {
-          if (cached.fingerprint === fingerprint) {
-            replayCachedResponse(res, cached);
-          } else {
-            sendFingerprintMismatch(res);
-          }
-          return;
-        }
-        // Cache miss: shadow the body, register a finish-time cache write,
-        // run the handler.
-        const body = shadowResponseBody(res);
-        res.on('finish', () => {
-          const status = res.statusCode;
-          if (status < 200 || status >= 500) return;
-          const value: CachedResponse = {
-            status,
-            headers: { ...res.getHeaders() } as Record<string, string | string[]>,
-            body: body.snapshot(),
-            fingerprint,
-            storedAt: clock(),
-          };
-          store.set(cacheKey, value, ttlMs).catch((err: unknown) => next(err));
-        });
-        next();
-      },
-      (err: unknown) => next(err),
-    );
+  // Resolve once at construction; the middleware closure captures these so a
+  // post-creation mutation of the caller's `opts` cannot affect behavior, and
+  // per-request work doesn't repeat normalization.
+  const resolved: ResolvedOptions = {
+    store: opts.store,
+    scope: opts.scope,
+    ttlMs: opts.ttlMs ?? DEFAULT_TTL_MS,
+    clock: opts.clock ?? Date.now,
+    trackedMethods:
+      opts.trackedMethods === undefined
+        ? DEFAULT_TRACKED_METHODS
+        : normalizeTrackedMethods(opts.trackedMethods),
   };
+
+  return (req, res, next) => idempotencyRequestHandler(req, res, next, resolved);
+}
+
+function idempotencyRequestHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+  opts: ResolvedOptions,
+): void {
+  if (!opts.trackedMethods.has(req.method)) {
+    next();
+    return;
+  }
+  const key = extractIdempotencyKey(req);
+  if (key === null) {
+    next();
+    return;
+  }
+  const cacheKey = `${opts.scope(req)}:${key}`;
+  const fingerprint = computeFingerprint(req);
+
+  getFromCacheOrExecuteHandler({ cacheKey, fingerprint, res, next, opts });
+}
+
+interface CacheExecutionContext {
+  cacheKey: string;
+  fingerprint: string;
+  res: Response;
+  next: NextFunction;
+  opts: ResolvedOptions;
+}
+
+function getFromCacheOrExecuteHandler(ctx: CacheExecutionContext): void {
+  const { cacheKey, fingerprint, res, next, opts } = ctx;
+  const { store, clock, ttlMs } = opts;
+
+  store.get(cacheKey, clock()).then(
+    (cached) => {
+      if (cached !== null) {
+        if (cached.fingerprint === fingerprint) {
+          replayCachedResponse(res, cached);
+        } else {
+          sendFingerprintMismatch(res);
+        }
+        return;
+      }
+      // Cache miss: shadow the body, register a finish-time cache write,
+      // run the handler.
+      const body = shadowResponseBody(res);
+      res.on('finish', () => {
+        const status = res.statusCode;
+        if (status < 200 || status >= 500) return;
+        const value: CachedResponse = {
+          status,
+          headers: { ...res.getHeaders() } as Record<string, string | string[]>,
+          body: body.snapshot(),
+          fingerprint,
+          storedAt: clock(),
+        };
+        store.set(cacheKey, value, ttlMs).catch((err: unknown) => next(err));
+      });
+      next();
+    },
+    (err: unknown) => next(err),
+  );
 }
 
 /**
@@ -135,6 +170,20 @@ export function createIdempotencyMiddleware(
  * Content-Length is recomputed from the cached body's byte length so chunk-
  * encoded originals replay with a correct, single content length.
  */
+function replayCachedResponse(res: Response, cached: CachedResponse): void {
+  for (const [name, value] of Object.entries(cached.headers)) {
+    res.setHeader(name, value);
+  }
+  res.setHeader('Idempotency-Replay', 'true');
+  res.setHeader('Content-Length', String(cached.body.length));
+  res.status(cached.status);
+  if (cached.body.length === 0) {
+    res.end();
+  } else {
+    res.end(Buffer.from(cached.body));
+  }
+}
+
 /**
  * Emits the canonical fingerprint_mismatch envelope. Called when the cache
  * holds an entry for the resolved key but the incoming request's fingerprint
@@ -149,20 +198,6 @@ function sendFingerprintMismatch(res: Response): void {
       message: 'Idempotency key reused with a different request payload.',
     }),
   );
-}
-
-function replayCachedResponse(res: Response, cached: CachedResponse): void {
-  for (const [name, value] of Object.entries(cached.headers)) {
-    res.setHeader(name, value);
-  }
-  res.setHeader('Idempotency-Replay', 'true');
-  res.setHeader('Content-Length', String(cached.body.length));
-  res.status(cached.status);
-  if (cached.body.length === 0) {
-    res.end();
-  } else {
-    res.end(Buffer.from(cached.body));
-  }
 }
 
 function computeFingerprint(req: Request): string {
@@ -222,18 +257,12 @@ function toBytes(chunk: unknown, encoding?: BufferEncoding): Uint8Array | null {
 
 function extractIdempotencyKey(req: Request): string | null {
   const raw = req.headers['idempotency-key'];
-  // normalize the header value to a string
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (typeof value !== 'string') return null;
-  // trim the value
   const trimmed = value.trim();
-  // if the value is empty, return null
   if (trimmed.length === 0) return null;
-  // return the trimmed value
   return trimmed;
 }
-
-
 
 function isStoreLike(value: unknown): value is Store {
   if (value === null || typeof value !== 'object') return false;
