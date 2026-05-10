@@ -30,7 +30,11 @@ export class MissingKidError extends Error {
 // claims validation — the security ordering is observable through B1.
 export function decodeHeader(token: string): JwtHeader {
   const segments = token.split('.');
-  if (segments.length !== 3 || segments.some((s) => s === '')) {
+  // 3-segment shape per RFC 7519. Header and payload must be present; the
+  // signature segment is allowed to be empty so unsigned (alg:none) tokens
+  // reach the alg check below and produce "unsupported alg" rather than
+  // "malformed". This is a load-bearing distinction — see spec §6/B1.
+  if (segments.length !== 3 || segments[0] === '' || segments[1] === '') {
     throw new MalformedTokenError();
   }
   let parsed: unknown;
