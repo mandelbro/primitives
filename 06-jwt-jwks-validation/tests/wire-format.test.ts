@@ -164,10 +164,14 @@ describe('wire-format envelope coverage (A3)', () => {
       defaultOpts({ fetcher: fetcher.fetcher, now: clock.now, clockSkewSec: 0 }),
     );
     const token = await signWithKey(key.privateKey, key.kid, validClaims(clock.now()));
-    // Flip the last char of the signature segment.
+    // Flip a char in the middle of the signature segment. Tampering the
+    // trailing chars is unreliable because base64url's "extra bits" can be
+    // discarded during decode, leaving the byte sequence unchanged.
     const segments = token.split('.');
     const sig = segments[2]!;
-    const flipped = sig.slice(0, -1) + (sig.slice(-1) === 'A' ? 'B' : 'A');
+    const mid = Math.floor(sig.length / 2);
+    const target = sig[mid]!;
+    const flipped = sig.slice(0, mid) + (target === 'A' ? 'B' : 'A') + sig.slice(mid + 1);
     const tampered = `${segments[0]}.${segments[1]}.${flipped}`;
     const res = await request(app).get('/protected').set('Authorization', `Bearer ${tampered}`);
     const challenge = parseChallenge(res.headers['www-authenticate']);

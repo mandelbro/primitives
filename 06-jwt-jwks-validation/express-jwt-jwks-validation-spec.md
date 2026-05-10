@@ -135,12 +135,21 @@ First failure short-circuits.
 
 `iat` is read but not validated.
 
-**Skew boundary semantics.** A token whose `exp` is exactly `clockSkewSec`
-seconds before `now()` is still valid; one second further past, expired. A
-token whose `nbf` is exactly `clockSkewSec` seconds after `now()` is valid;
-one second further into the future, not yet valid. This matches jose's
-`clockTolerance` behavior, which we inherit by passing
-`clockTolerance: clockSkewSec`.
+**Skew boundary semantics.** Inherited from jose's `clockTolerance` behavior,
+which we pass through verbatim as `clockTolerance: clockSkewSec`. The two
+boundaries are **asymmetric** because jose uses different comparators for
+`exp` vs `nbf`:
+
+- `exp` boundary is **exclusive** of validity (`exp <= now − skew` →
+  expired). A token whose `exp` equals `now − skew` is the first expired
+  second; `now − skew + 1` is the latest still-valid second.
+- `nbf` boundary is **inclusive** of validity (`nbf > now + skew` → not
+  yet valid). A token whose `nbf` equals `now + skew` is still valid;
+  `now + skew + 1` is the first not-yet-valid second.
+
+This asymmetry is a property of jose v5; we do not paper over it because
+that would mean second-guessing the underlying library on a security-
+sensitive boundary.
 
 ### 7. RFC 6750 wire format
 

@@ -6,7 +6,19 @@ where I made a judgment call that should be ratified or overruled.
 
 ## Open
 
-(none yet)
+### Skew boundary asymmetry — spec text revised in §6 (Batch 5) **REVIEW**
+
+The original spec said both `exp` and `nbf` boundaries were inclusive of
+validity. That is true for `nbf` but **not** for `exp` — jose v5's actual
+checks are asymmetric:
+
+- `exp <= now − tolerance` → expired (boundary exclusive of validity)
+- `nbf > now + tolerance` → not yet valid (boundary inclusive of validity)
+
+I updated the spec's "Skew boundary semantics" paragraph in §6 to describe
+the actual behavior. Tests pin both boundaries against jose's real
+behavior. **Worth a quick read to confirm the revised paragraph reflects
+your intent.**
 
 ## Resolved during build
 
