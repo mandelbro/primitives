@@ -6,6 +6,23 @@ where I made a judgment call that should be ratified or overruled.
 
 ## Open
 
+### `requireScope` realm is hardcoded to "api" (Batch 9) **REVIEW**
+
+The spec's `requireScope(scope)` API takes only a scope string; there's no
+way to pass a `realm`. The 403 envelope per RFC 6750 includes `realm=`,
+which the implementation hardcodes to `"api"` — the same default jwtAuth
+uses. If a consumer customizes `jwtAuth({ realm: "custom" })`, their 401
+challenges will say `realm="custom"` but their 403s will still say
+`realm="api"`.
+
+Three options:
+1. Leave as-is; document it. (Current.)
+2. Extend `requireScope(scope, opts?)` with `{ realm }`.
+3. Have `jwtAuth` stash its realm onto something like `app.locals` so
+   `requireScope` can read it. Couples the two middlewares more tightly.
+
+Worth a decision before merge.
+
 ### Skew boundary asymmetry — spec text revised in §6 (Batch 5) **REVIEW**
 
 The original spec said both `exp` and `nbf` boundaries were inclusive of
