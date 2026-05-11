@@ -54,6 +54,13 @@ export function decodeHeader(token: string): JwtHeader {
   if (header['alg'] !== 'RS256') {
     throw new UnsupportedAlgError();
   }
+  // The empty-signature carve-out above exists only to let alg=none reach
+  // the alg check (B1 invariant). Once we know alg=RS256, an empty
+  // signature segment is structurally malformed and must be rejected
+  // here, not relied on jose's internal error taxonomy to catch.
+  if (segments[2] === '') {
+    throw new MalformedTokenError();
+  }
   if (typeof header['kid'] !== 'string' || header['kid'] === '') {
     throw new MissingKidError();
   }
