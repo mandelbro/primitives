@@ -54,21 +54,27 @@ describe('requireScope (F1, F2)', () => {
     expect(res.body.ok).toBe(true);
   });
 
+  // Full-header equality (not .toContain) pins every parameter — realm,
+  // error, and error_description — and their RFC 7235 quoted-string
+  // ordering. Substring checks would silently pass if a refactor dropped
+  // realm="api" or reordered params; this assertion catches that.
+  const EXPECTED_INSUFFICIENT_SCOPE_HEADER =
+    'Bearer realm="api", error="insufficient_scope", error_description="requires admin"';
+
   it('F2: required scope absent → 403 insufficient_scope "requires admin"', async () => {
     const t = buildApp({ tokenScope: 'read' });
     const token = await t.sign('read');
     const res = await request(t.app).get('/admin').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
-    expect(res.headers['www-authenticate']).toContain('error="insufficient_scope"');
-    expect(res.headers['www-authenticate']).toContain('error_description="requires admin"');
+    expect(res.headers['www-authenticate']).toBe(EXPECTED_INSUFFICIENT_SCOPE_HEADER);
   });
 
-  it('F2: token with no scope claim at all → 403', async () => {
+  it('F2: token with no scope claim at all → 403 with identical envelope', async () => {
     const t = buildApp({ tokenScope: '' });
-    const token = await t.sign(); // no scope
+    const token = await t.sign(); // no scope claim on the token
     const res = await request(t.app).get('/admin').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
-    expect(res.headers['www-authenticate']).toContain('insufficient_scope');
+    expect(res.headers['www-authenticate']).toBe(EXPECTED_INSUFFICIENT_SCOPE_HEADER);
   });
 });
 
