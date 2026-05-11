@@ -118,6 +118,11 @@ serves as belt-and-suspenders for §1: even if `jose.jwtVerify` is misconfigured
 the explicit `alg !== 'RS256'` check rejects algorithm-confusion attacks. The
 payload (segment 2) and signature (segment 3) are not pre-decoded; jose handles
 those during verification. We pass `algorithms: ['RS256']` to jose regardless.
+Test B2 validates this is genuine redundancy — with the pre-decode mocked
+out, the jose-side check alone still rejects RSA-family hash confusion
+(RS384/RS512/PS256 against an RSA verifier key). The WebCrypto algorithm
+binding on the imported key is **not** a structural defense here; jose v5
+will verify across hashes if `algorithms` is absent.
 
 ### 6. Verification pipeline order
 
