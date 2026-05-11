@@ -1,4 +1,4 @@
-import { errors as joseErrors, jwtVerify } from 'jose';
+import { jwtVerify } from 'jose';
 import type { AuthContext, JwtAuthOptions, RequestHandler } from './types.js';
 import { validateOptions } from './validate-options.js';
 import {
@@ -8,6 +8,7 @@ import {
   UnsupportedAlgError,
 } from './decode-header.js';
 import { JwksCache, JwksUpstreamError } from './jwks-cache.js';
+import { mapJoseError } from './map-jose-error.js';
 import { normalizeScope } from './scope.js';
 import { send401 } from './error-response.js';
 
@@ -122,18 +123,4 @@ export function jwtAuth(opts: JwtAuthOptions): RequestHandler {
     req.auth = auth;
     next();
   };
-}
-
-function mapJoseError(err: unknown): string {
-  if (err instanceof joseErrors.JWTExpired) return 'token expired';
-  if (err instanceof joseErrors.JWTClaimValidationFailed) {
-    const claim = (err as { claim?: string }).claim;
-    if (claim === 'iss') return 'invalid issuer';
-    if (claim === 'aud') return 'invalid audience';
-    if (claim === 'nbf') return 'token not yet valid';
-    return 'invalid signature';
-  }
-  if (err instanceof joseErrors.JWSSignatureVerificationFailed) return 'invalid signature';
-  if (err instanceof joseErrors.JWSInvalid) return 'malformed';
-  return 'invalid signature';
 }
