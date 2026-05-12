@@ -1,0 +1,25 @@
+{
+  "name": "08-cli-subcommand-output-helper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CLI subcommand + reusable output helper. Scaffold for a 35-minute live-coding exercise.",
+  "bin": {
+    "pcsk": "./bin/pcsk.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm typecheck && pnpm test"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
