@@ -16,6 +16,21 @@ const DEFAULT_TTL_MS = 600_000;
 const DEFAULT_SKEW_SEC = 60;
 const DEFAULT_REALM = 'api';
 
+/**
+ * Build an Express middleware that validates RS256 JWTs against a JWKS
+ * endpoint and populates `req.auth` on success.
+ *
+ * **Each call instantiates its own JwksCache.** Mount `jwtAuth(opts)`
+ * once per `jwksUri` and share the returned handler across routes —
+ * calling `jwtAuth(opts)` per-route works correctly but creates one
+ * independent cache per mount, each making its own JWKS fetches. The
+ * extra fetches are silent: the wire response is identical, so only
+ * upstream load (or a `fetcher.callCount` assertion in tests) reveals
+ * the duplication.
+ *
+ * Throws synchronously on invalid options (see `validate-options.ts`
+ * and the spec's Error States section).
+ */
 export function jwtAuth(opts: JwtAuthOptions): RequestHandler {
   validateOptions(opts);
 
