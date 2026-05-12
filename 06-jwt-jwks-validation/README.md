@@ -13,7 +13,7 @@ for the spec — public API, design decisions, behavior-driven test plan.
 
 ```bash
 pnpm install
-pnpm test          # vitest run — 62 cases across 9 behavioral test files
+pnpm test          # vitest run — 98 cases across 15 behavioral test files
 pnpm typecheck     # tsc --noEmit
 pnpm check         # typecheck + test
 ```
@@ -27,10 +27,11 @@ pnpm check         # typecheck + test
 | `src/require-scope.ts` | `requireScope(scope)` factory |
 | `src/jwks-cache.ts` | Per-kid JWKS cache: TTL, single-flight refresh, replace-on-refresh |
 | `src/decode-header.ts` | Pre-decode JWT header per §5 (belt-and-suspenders alg pinning) |
-| `src/error-response.ts` | RFC 6750 `WWW-Authenticate` envelope construction |
+| `src/map-jose-error.ts` | jose error class → §7 wire-format `error_description` mapping |
+| `src/error-response.ts` | RFC 6750 `WWW-Authenticate` envelope construction (quoted-string escaping) |
 | `src/scope.ts` | §3 normalization of the standard `scope` claim |
 | `src/validate-options.ts` | Synchronous factory-time options validation |
-| `src/types.ts` | `JwtAuthOptions`, `AuthContext`, `Request.auth` augmentation |
+| `src/types.ts` | `JwtAuthOptions`, `AuthContext`, `RequireScopeOptions`, `Request.auth` augmentation |
 | `tests/fixtures.ts` | RS256 key gen, controllable now/fetcher, mountApp helper |
 | `tests/wire-format.test.ts` | Parameterized over §7 envelope table |
 | `tests/rotation.test.ts` | §13 zero-downtime rotation walked end-to-end |
@@ -72,11 +73,14 @@ specific claims (`scp`, `permissions`, etc.) directly from `claims`.
 
 These are the non-obvious choices. Full rationale lives in the spec.
 
-- **Hard-pin RS256.** `alg: none` and `alg: HS256` are rejected at header
-  pre-decode, before signature verify. Algorithm-confusion is eliminated
-  by configuration, not by hoping jose's options stick. The pipeline-
-  ordering test (B1) makes this observable: an `alg=none` token with
-  expired `exp` and tampered signature fails with `"unsupported alg"`.
+- **Hard-pin RS256, in two independent layers.** `alg: none` and
+  `alg: HS256` are rejected at header pre-decode, before signature verify
+  (B1 pins the pipeline ordering). jose is also called with
+  `algorithms: ['RS256']` — B2 validates empirically that this layer is
+  load-bearing, not decoration: with the pre-decode mocked out, jose
+  alone still rejects RSA-family hash confusion (RS384/RS512/PS256
+  against the same RSA key). Each layer is independently sufficient
+  against algorithm confusion.
 
 - **Custom JwksCache + jose for verify.** `jose.jwtVerify` does the
   cryptography; the cache primitive is ours: per-kid entries, TTL,
@@ -108,32 +112,3 @@ These are the non-obvious choices. Full rationale lives in the spec.
 - **No proactive prefetch, no timers.** First request after cold start
   triggers the first JWKS fetch. Avoids timer drift, startup races with
   the IdP, and redundant fetches when no requests are arriving.
-
-## TDD progression
-
-Spec-first; tests written one batch at a time before each green slice.
-
-| Batch | Group | Tests | Notes |
-|---|---|---|---|
-| 0 | Setup | — | Fixtures: RS256 key gen, fakeFetcher, fakeNow, mountApp |
-| 1 | H | 8 | Options validation throws synchronously at factory call |
-| 2 | A1, A2 | 3 | Happy path + missing creds — drives full pipeline thin slice |
-| 3 | A3 | 15 | §7 wire-format envelope table parameterized |
-| 4 | B1, A4 | 3 | Pipeline ordering + aud flexibility |
-| 5 | C1-C3, E1 | 12 | Skew boundaries + scope normalization table |
-| 6 | D1, D2, D7 | 3 | Cache hit / miss / TTL |
-| 7 | D3, D4 | 2 | Concurrent kid-miss + cleanup-on-reject |
-| 8 | D5, D6, D8, D9 | 10 | Eviction, instance isolation, upstream failure, key filtering |
-| 9 | F1, F2, G1, G2 | 5 | requireScope + wiring errors |
-| 10 | I1 | 1 | Zero-downtime rotation walked end-to-end |
-
-Most batches went green on first test run because earlier batches forced
-the pipeline into a complete shape. The two real fixes were:
-
-- **Empty signature segment** must be allowed by `decodeHeader` so
-  `alg=none` reaches the alg check rather than failing at "malformed."
-- **Trailing-char base64url tampering** is unreliable for the
-  invalid-signature test; mid-segment tamper is.
-
-See [DEVIATIONS.md](DEVIATIONS.md) for items that need a review decision
-before merge.
