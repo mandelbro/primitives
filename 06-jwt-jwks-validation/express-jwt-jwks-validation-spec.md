@@ -45,6 +45,13 @@ export interface AuthContext {
   claims: Record<string, unknown>;
 }
 
+export interface RequireScopeOptions {
+  /** WWW-Authenticate realm. Default "api". Match `jwtAuth`'s realm so
+   * 401 and 403 challenges on the same protected resource share a realm
+   * (RFC 7235). */
+  realm?: string;
+}
+
 declare module 'express-serve-static-core' {
   interface Request {
     auth?: AuthContext;
@@ -52,7 +59,7 @@ declare module 'express-serve-static-core' {
 }
 
 export function jwtAuth(opts: JwtAuthOptions): RequestHandler;
-export function requireScope(scope: string): RequestHandler;
+export function requireScope(scope: string, opts?: RequireScopeOptions): RequestHandler;
 ```
 
 `claims` is the full decoded JWT payload verbatim from jose, including standard
@@ -181,8 +188,15 @@ returned as 401 (operational consistency; RFC's SHOULD-400 is latitude).
 ### 8. Scope enforcement is a separate middleware
 
 `jwtAuth` does authentication; `requireScope` does authorization. `jwtAuth`
-populates `req.auth` once at app/router scope. `requireScope(scope)` reads it
-per route. Single-scope semantics; multi-scope is deferred.
+populates `req.auth` once at app/router scope. `requireScope(scope, opts?)`
+reads it per route. Single-scope semantics; multi-scope is deferred.
+
+`requireScope` accepts an optional `realm` (default `"api"`) so consumers
+that customize `jwtAuth({ realm: ... })` can pass the same string here. The
+realm has to be set in both places because the middlewares are independent
+by design — but RFC 7235 expects challenges on the same protected resource
+to share a realm, so consumers who configure one realm should configure the
+other to match. F3 pins this behavior end-to-end.
 
 ### 9. JWKS upstream failure handling
 

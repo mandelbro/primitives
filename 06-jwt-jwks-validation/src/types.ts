@@ -27,6 +27,15 @@ export interface AuthContext {
   claims: Record<string, unknown>;
 }
 
+export interface RequireScopeOptions {
+  /**
+   * WWW-Authenticate realm. Default "api". Match `jwtAuth`'s realm so 401
+   * and 403 challenges on the same protected resource share a realm (RFC
+   * 7235). Mismatched realms confuse compliant client retry logic.
+   */
+  realm?: string;
+}
+
 declare module 'express-serve-static-core' {
   interface Request {
     auth?: AuthContext;

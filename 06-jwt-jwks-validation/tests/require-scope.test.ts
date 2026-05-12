@@ -76,6 +76,52 @@ describe('requireScope (F1, F2)', () => {
     expect(res.status).toBe(403);
     expect(res.headers['www-authenticate']).toBe(EXPECTED_INSUFFICIENT_SCOPE_HEADER);
   });
+
+  // RFC 7235 expects challenges on the same protected resource to share a
+  // realm. `jwtAuth` and `requireScope` are independent middlewares (§8) so
+  // the realm has to be passed to each — but the two middlewares mounted on
+  // the same route MUST produce matching `realm="..."` parameters on both
+  // the 401 (missing creds) and 403 (insufficient scope) challenges.
+  it('F3: requireScope realm option matches jwtAuth realm on the same resource', async () => {
+    const fetcher = fakeFetcher();
+    fetcher.enqueue(TEST_JWKS_URI, { body: jwks([key.publicJwk]) });
+    const clock = fakeNow();
+    const app = express();
+    const auth = jwtAuth(
+      defaultOpts({ fetcher: fetcher.fetcher, now: clock.now, realm: 'tenant-x' }),
+    );
+    app.get(
+      '/admin',
+      auth,
+      requireScope('admin', { realm: 'tenant-x' }),
+      (_req, res) => res.json({ ok: true }),
+    );
+    app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      res.status(500).json({ error: err.message });
+    });
+
+    // 401: missing Authorization. The jwtAuth-side realm flows through to
+    // the strict RFC 6750 §3 missing-creds envelope.
+    const r401 = await request(app).get('/admin');
+    expect(r401.status).toBe(401);
+    expect(r401.headers['www-authenticate']).toBe('Bearer realm="tenant-x"');
+
+    // 403: valid token, insufficient scope. The requireScope-side realm
+    // must match — same string on both challenges for the same resource.
+    const token = await signWithKey(key.privateKey, key.kid, {
+      iss: TEST_ISSUER,
+      aud: TEST_AUDIENCE,
+      sub: 'u',
+      exp: nowSec(clock.now()) + 3600,
+      iat: nowSec(clock.now()),
+      scope: 'read',
+    });
+    const r403 = await request(app).get('/admin').set('Authorization', `Bearer ${token}`);
+    expect(r403.status).toBe(403);
+    expect(r403.headers['www-authenticate']).toBe(
+      'Bearer realm="tenant-x", error="insufficient_scope", error_description="requires admin"',
+    );
+  });
 });
 
 describe('wiring errors (G1, G2)', () => {
