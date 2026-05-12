@@ -92,6 +92,16 @@ describe('JWKS upstream failure modes (D8)', () => {
     key = await generateTestKeyPair('kid-1');
   });
 
+  // §9: every upstream-failure mode collapses to the SAME bearer-facing
+  // envelope. Pinning full-header equality (not just .toContain) means a
+  // regression that "helpfully" propagates upstream status (e.g. error="503"
+  // or error_description="upstream timeout") breaks the assertion — the
+  // bearer must see no infra signal whatsoever. Logger context is asserted
+  // separately per sub-case to verify the signal goes to the operator,
+  // not the bearer.
+  const EXPECTED_UNKNOWN_KID_HEADER =
+    'Bearer realm="api", error="invalid_token", error_description="unknown kid"';
+
   function validClaims(clockMs: number): Parameters<typeof signWithKey>[2] {
     return {
       iss: TEST_ISSUER,
@@ -118,7 +128,7 @@ describe('JWKS upstream failure modes (D8)', () => {
     const res = await request(app).get('/protected').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(401);
-    expect(res.headers['www-authenticate']).toContain('unknown kid');
+    expect(res.headers['www-authenticate']).toBe(EXPECTED_UNKNOWN_KID_HEADER);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.msg).toBe('jwks_fetch_error');
     expect(calls[0]!.ctx['url']).toBe(TEST_JWKS_URI);
@@ -141,7 +151,7 @@ describe('JWKS upstream failure modes (D8)', () => {
     const res = await request(app).get('/protected').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(401);
-    expect(res.headers['www-authenticate']).toContain('unknown kid');
+    expect(res.headers['www-authenticate']).toBe(EXPECTED_UNKNOWN_KID_HEADER);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.ctx['error']).toBe('ECONNREFUSED');
   });
@@ -162,7 +172,7 @@ describe('JWKS upstream failure modes (D8)', () => {
     const res = await request(app).get('/protected').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(401);
-    expect(res.headers['www-authenticate']).toContain('unknown kid');
+    expect(res.headers['www-authenticate']).toBe(EXPECTED_UNKNOWN_KID_HEADER);
     expect(calls).toHaveLength(1);
   });
 
@@ -182,7 +192,7 @@ describe('JWKS upstream failure modes (D8)', () => {
     const res = await request(app).get('/protected').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(401);
-    expect(res.headers['www-authenticate']).toContain('unknown kid');
+    expect(res.headers['www-authenticate']).toBe(EXPECTED_UNKNOWN_KID_HEADER);
     expect(calls).toHaveLength(1);
   });
 });
