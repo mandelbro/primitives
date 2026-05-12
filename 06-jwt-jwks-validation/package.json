@@ -1,0 +1,30 @@
+{
+  "name": "express-jwt-jwks-validation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "jwtAuth + requireScope: Express middleware that validates RS256 JWTs against a JWKS endpoint",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm run typecheck && pnpm run test"
+  },
+  "dependencies": {
+    "jose": "^5.9.0"
+  },
+  "peerDependencies": {
+    "express": "^4.19.0 || ^5.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/express-serve-static-core": "^5.1.1",
+    "@types/node": "^25.6.0",
+    "@types/supertest": "^7.2.0",
+    "express": "^5.0.0",
+    "supertest": "^7.2.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
+  }
+}
