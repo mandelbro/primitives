@@ -1,5 +1,3 @@
-import type { RequestHandler } from 'express';
-
 export interface JwtAuthOptions {
   /** Full URL of the JWKS endpoint. */
   jwksUri: string;
@@ -41,5 +39,3 @@ declare module 'express-serve-static-core' {
     auth?: AuthContext;
   }
 }
-
-export type { RequestHandler };

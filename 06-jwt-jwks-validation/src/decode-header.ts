@@ -37,6 +37,14 @@ export function decodeHeader(token: string): JwtHeader {
   if (segments.length !== 3 || segments[0] === '' || segments[1] === '') {
     throw new MalformedTokenError();
   }
+  // Validate the base64url charset explicitly rather than relying on
+  // Node's `Buffer.from(..., 'base64url')` leniency. Node's decoder
+  // silently accepts some non-alphabet bytes and produces a possibly-empty
+  // buffer; the explicit check makes rejection deterministic and removes
+  // dependence on a behavior that could change across Node versions.
+  if (!/^[A-Za-z0-9_-]+$/.test(segments[0]!)) {
+    throw new MalformedTokenError();
+  }
   let parsed: unknown;
   try {
     const json = Buffer.from(segments[0]!, 'base64url').toString('utf-8');

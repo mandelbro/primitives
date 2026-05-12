@@ -1,4 +1,5 @@
-import type { RequestHandler, RequireScopeOptions } from './types.js';
+import type { RequestHandler } from 'express';
+import type { RequireScopeOptions } from './types.js';
 import { send403 } from './error-response.js';
 
 const DEFAULT_REALM = 'api';

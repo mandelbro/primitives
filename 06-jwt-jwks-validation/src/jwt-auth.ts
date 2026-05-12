@@ -1,5 +1,6 @@
 import { jwtVerify } from 'jose';
-import type { AuthContext, JwtAuthOptions, RequestHandler } from './types.js';
+import type { RequestHandler } from 'express';
+import type { AuthContext, JwtAuthOptions } from './types.js';
 import { validateOptions } from './validate-options.js';
 import {
   decodeHeader,

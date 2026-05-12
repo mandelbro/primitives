@@ -266,7 +266,8 @@ See §7 for failure → wire mapping.
 - `jwksUri` missing or not a parseable URL
 - `audience` empty string or empty array
 - `issuer` missing
-- `cacheTtlMs <= 0`, `clockSkewSec < 0`
+- `cacheTtlMs` not a positive finite number (rejects `<= 0`, `NaN`, `Infinity`)
+- `clockSkewSec` not a non-negative finite number (rejects `< 0`, `NaN`, `Infinity`)
 - `realm` contains CR, LF, or NUL (header-injection vectors with no
   quoted-string escaping that recovers a safe header)
 
@@ -434,8 +435,8 @@ boundary semantics can be exercised without supertest's overhead.
   | `audience` empty string |
   | `audience` empty array |
   | `issuer` missing |
-  | `cacheTtlMs <= 0` |
-  | `clockSkewSec < 0` |
+  | `cacheTtlMs <= 0`, `NaN`, or `Infinity` |
+  | `clockSkewSec < 0`, `NaN`, or `Infinity` |
 
 ### Group I — Zero-downtime key rotation (end-to-end)
 

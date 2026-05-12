@@ -21,11 +21,14 @@ export function validateOptions(opts: JwtAuthOptions): void {
   if (!opts.issuer) {
     throw new Error('jwtAuth: issuer is required');
   }
-  if (opts.cacheTtlMs !== undefined && opts.cacheTtlMs <= 0) {
-    throw new Error('jwtAuth: cacheTtlMs must be positive');
+  if (opts.cacheTtlMs !== undefined && (!Number.isFinite(opts.cacheTtlMs) || opts.cacheTtlMs <= 0)) {
+    throw new Error('jwtAuth: cacheTtlMs must be a positive finite number');
   }
-  if (opts.clockSkewSec !== undefined && opts.clockSkewSec < 0) {
-    throw new Error('jwtAuth: clockSkewSec must be non-negative');
+  if (
+    opts.clockSkewSec !== undefined &&
+    (!Number.isFinite(opts.clockSkewSec) || opts.clockSkewSec < 0)
+  ) {
+    throw new Error('jwtAuth: clockSkewSec must be a non-negative finite number');
   }
   // realm flows verbatim into the WWW-Authenticate header. CR/LF/NUL are
   // header-injection vectors with no quoted-string escaping that recovers
