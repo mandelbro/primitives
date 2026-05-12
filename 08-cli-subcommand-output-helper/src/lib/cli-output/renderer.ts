@@ -1,0 +1,43 @@
+export type OutputFormat = 'table' | 'json';
+
+export interface TableFormat<T> {
+  readonly headers: readonly string[];
+  readonly row: (item: T) => readonly string[];
+}
+
+export interface RendererOptions<T> {
+  readonly output: OutputFormat;
+  readonly stdout: NodeJS.WritableStream;
+  readonly color: boolean;
+  readonly table: TableFormat<T>;
+}
+
+export interface EnvelopeError {
+  readonly code: string;
+  readonly message: string;
+}
+
+export type Envelope<T> =
+  | { readonly ok: true; readonly data: T; readonly exitCode: 0 }
+  | { readonly ok: false; readonly error: EnvelopeError; readonly exitCode: number };
+
+export interface Renderer<T> {
+  render(data: T): void;
+  renderError(err: Error): void;
+}
+
+export function createRenderer<T>(opts: RendererOptions<T>): Renderer<T> {
+  return {
+    render(data: T): void {
+      if (opts.output === 'json') {
+        const envelope: Envelope<T> = { ok: true, data, exitCode: 0 };
+        opts.stdout.write(JSON.stringify(envelope) + '\n');
+        return;
+      }
+      throw new Error('table-mode render not yet implemented');
+    },
+    renderError(_err: Error): void {
+      throw new Error('renderError not yet implemented');
+    },
+  };
+}
