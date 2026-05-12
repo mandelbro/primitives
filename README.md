@@ -12,6 +12,7 @@ Every primitive is independent: its own `package.json`, its own lockfile, its ow
 | 03 | [Idempotency Middleware](03-idempotency-middleware/) | Express middleware for the `Idempotency-Key` header: scoped per-tenant, fingerprint-keyed cache, verbatim replay on retry, 422 on payload mismatch. |
 | 04 | [API Client Retry & Backoff](04-api-client-retry-backoff/) | `fetchWithRetry`: retries with exponential backoff, `Retry-After` honoring, `AbortSignal` end-to-end, no runtime deps. |
 | 05 | [MCP Tool Definition](05-mcp-tool-definition/) | `registerSearchTool`: wraps a Vector DB search endpoint as an MCP tool an LLM agent can call. |
+| 06 | [JWT/JWKS Validation](06-jwt-jwks-validation/) | `jwtAuth` + `requireScope`: Express middleware that validates RS256 JWTs against a JWKS endpoint, with per-kid caching, single-flight refresh, zero-downtime rotation, and RFC 6750 envelopes. |
 
 ## What's in each primitive
 
