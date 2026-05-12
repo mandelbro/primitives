@@ -267,6 +267,21 @@ See §7 for failure → wire mapping.
 - `audience` empty string or empty array
 - `issuer` missing
 - `cacheTtlMs <= 0`, `clockSkewSec < 0`
+- `realm` contains CR, LF, or NUL (header-injection vectors with no
+  quoted-string escaping that recovers a safe header)
+
+**Options validation (thrown at `requireScope(scope, opts?)` call site):**
+
+- `scope` contains CR, LF, or NUL
+- `realm` contains CR, LF, or NUL
+
+**Header rendering invariants.** RFC 7235 `quoted-string` requires DQUOTE
+and BACKSLASH to be escaped as `\"` and `\\`. `realm`, `error`, and
+`error_description` are all run through this escape at render time so
+consumer-supplied or scope-derived values can carry these characters
+without producing a malformed header. Line terminators have no escaping
+that's safe in HTTP, so they're rejected at construction (above) rather
+than escaped.
 
 ## Test Plan
 

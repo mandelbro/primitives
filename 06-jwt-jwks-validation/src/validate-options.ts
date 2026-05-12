@@ -27,4 +27,11 @@ export function validateOptions(opts: JwtAuthOptions): void {
   if (opts.clockSkewSec !== undefined && opts.clockSkewSec < 0) {
     throw new Error('jwtAuth: clockSkewSec must be non-negative');
   }
+  // realm flows verbatim into the WWW-Authenticate header. CR/LF/NUL are
+  // header-injection vectors with no quoted-string escaping that recovers
+  // a safe header — reject loudly at construction. DQUOTE and BACKSLASH
+  // are handled separately by buildHeader's escapeQuoted.
+  if (opts.realm !== undefined && /[\r\n\0]/.test(opts.realm)) {
+    throw new Error('jwtAuth: realm must not contain CR, LF, or NUL');
+  }
 }
