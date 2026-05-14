@@ -49,6 +49,11 @@ export function createGetCommand(deps: GetCommandDeps): Command {
         renderer.render(result);
       } catch (err) {
         const e = err as Error;
+        if (e.name === 'AbortError') {
+          // D13: SIGINT-initiated cancellation. No output; 130 is the Unix convention.
+          process.exitCode = 130;
+          return;
+        }
         renderer.renderError(e);
         process.exitCode = e instanceof CliError ? e.exitCode : 1;
       }

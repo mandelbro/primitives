@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
   createInMemoryWriter,
   type InMemoryWriter,
@@ -37,6 +39,7 @@ function build(opts: {
   readonly isTTY: boolean;
   readonly resolveOutput: () => OutputFormat | undefined;
   readonly clientOpts?: FakeClientOptions;
+  readonly signal?: AbortSignal;
 }): ReturnType<typeof createGetCommand> {
   return createGetCommand({
     client: createFakeIndexClient(opts.clientOpts ?? { index: DEFAULT_INDEX }),
@@ -44,7 +47,7 @@ function build(opts: {
     stderr: harness.stderr.writer,
     isTTY: opts.isTTY,
     noColor: true,
-    signal: new AbortController().signal,
+    signal: opts.signal ?? new AbortController().signal,
     resolveOutput: opts.resolveOutput,
   });
 }
@@ -165,7 +168,6 @@ describe('pcsk index get — error path propagation', () => {
         resolveOutput: () => undefined,
         clientOpts,
       });
-      // Wrapping in try/catch and asserting catch never fires is the spec form.
       let caught: unknown = undefined;
       try {
         await cmd.parseAsync(['demo'], { from: 'user' });
@@ -175,4 +177,35 @@ describe('pcsk index get — error path propagation', () => {
       expect(caught).toBeUndefined();
     }
   });
+});
+
+describe('pcsk index get — cancellation + no-process.exit invariant', () => {
+  // G-T9: static check per D12 rule 2. `process.exitCode = …` is permitted; the
+  // function-call form `process.exit(...)` is not. Trailing paren distinguishes.
+  it('source contains no `process.exit(` (allows `process.exitCode = …`)', () => {
+    const getSrcPath = fileURLToPath(new URL('../get.ts', import.meta.url));
+    const src = readFileSync(getSrcPath, 'utf8');
+    expect(src).not.toContain('process.exit(');
+  });
+
+  for (const output of ['table', 'json'] as const) {
+    // G-T11 (parameterized over format): silent abort, exitCode 130, no output.
+    it(`AbortError is intercepted silently (output:${output}); exitCode=130`, async () => {
+      const controller = new AbortController();
+      controller.abort(); // pre-abort so the fake's hangUntilAbort branch rejects immediately
+
+      const cmd = build({
+        isTTY: output === 'table',
+        resolveOutput: () => output,
+        clientOpts: { hangUntilAbort: true },
+        signal: controller.signal,
+      });
+
+      await cmd.parseAsync(['demo'], { from: 'user' });
+
+      expect(harness.stdout.toString()).toBe('');
+      expect(harness.stderr.toString()).toBe('');
+      expect(process.exitCode).toBe(130);
+    });
+  }
 });
