@@ -83,3 +83,64 @@ describe('createRenderer — JSON success rendering', () => {
     expect(body).not.toMatch(/\s[:,]/);
   });
 });
+
+describe('createRenderer — table success rendering', () => {
+  let stdout: InMemoryWriter;
+
+  beforeEach(() => {
+    stdout = createInMemoryWriter();
+  });
+
+  // T3
+  it('writes a cli-table3 rendering containing all headers and row values', () => {
+    const renderer = createRenderer<Demo>({
+      output: 'table',
+      stdout: stdout.writer,
+      color: false,
+      table: demoTable,
+    });
+
+    renderer.render({ name: 'alpha', count: 3 });
+
+    const out = stdout.toString();
+    // every header label appears
+    for (const header of demoTable.headers) {
+      expect(out).toContain(header);
+    }
+    // every row cell appears
+    for (const cell of demoTable.row({ name: 'alpha', count: 3 })) {
+      expect(out).toContain(cell);
+    }
+    // table output is terminated by a newline
+    expect(out.endsWith('\n')).toBe(true);
+  });
+
+  // T4
+  it('emits at least one ANSI escape when color:true', () => {
+    const renderer = createRenderer<Demo>({
+      output: 'table',
+      stdout: stdout.writer,
+      color: true,
+      table: demoTable,
+    });
+
+    renderer.render({ name: 'alpha', count: 3 });
+
+    // Don't pin specific codes — chalk versions vary. Just check for any CSI prefix.
+    expect(stdout.toString()).toMatch(/\x1b\[/);
+  });
+
+  // T5
+  it('emits no ANSI escapes when color:false', () => {
+    const renderer = createRenderer<Demo>({
+      output: 'table',
+      stdout: stdout.writer,
+      color: false,
+      table: demoTable,
+    });
+
+    renderer.render({ name: 'alpha', count: 3 });
+
+    expect(stdout.toString()).not.toMatch(/\x1b\[/);
+  });
+});

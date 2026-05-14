@@ -1,3 +1,6 @@
+import { Chalk } from 'chalk';
+import Table from 'cli-table3';
+
 export type OutputFormat = 'table' | 'json';
 
 export interface TableFormat<T> {
@@ -34,7 +37,14 @@ export function createRenderer<T>(opts: RendererOptions<T>): Renderer<T> {
         opts.stdout.write(JSON.stringify(envelope) + '\n');
         return;
       }
-      throw new Error('table-mode render not yet implemented');
+      const c = new Chalk({ level: opts.color ? 3 : 0 });
+      const head = opts.table.headers.map((h) => c.bold(h));
+      const table = new Table({
+        head,
+        style: { head: [], border: [] },
+      });
+      table.push([...opts.table.row(data)]);
+      opts.stdout.write(table.toString() + '\n');
     },
     renderError(_err: Error): void {
       throw new Error('renderError not yet implemented');
