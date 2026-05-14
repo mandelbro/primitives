@@ -1,30 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { Writable } from 'node:stream';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createRenderer, type TableFormat } from '../renderer.js';
 import { CliError, NotFoundError, UsageError } from '../errors.js';
-
-interface InMemoryWriter {
-  readonly writer: NodeJS.WritableStream;
-  toString(): string;
-}
-
-function createInMemoryWriter(): InMemoryWriter {
-  const chunks: Buffer[] = [];
-  const writer = new Writable({
-    write(chunk, _enc, cb): void {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      cb();
-    },
-  });
-  return {
-    writer,
-    toString(): string {
-      return Buffer.concat(chunks).toString('utf8');
-    },
-  };
-}
+import {
+  createInMemoryWriter,
+  type InMemoryWriter,
+} from '../../../__tests__/fixtures/in-memory-writer.js';
 
 interface Demo {
   readonly name: string;
