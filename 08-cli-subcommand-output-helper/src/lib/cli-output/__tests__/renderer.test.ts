@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Writable } from 'node:stream';
 import { createRenderer, type TableFormat } from '../renderer.js';
+import { CliError, NotFoundError, UsageError } from '../errors.js';
 
 interface InMemoryWriter {
   readonly writer: NodeJS.WritableStream;
@@ -142,5 +143,70 @@ describe('createRenderer — table success rendering', () => {
     renderer.render({ name: 'alpha', count: 3 });
 
     expect(stdout.toString()).not.toMatch(/\x1b\[/);
+  });
+});
+
+describe('createRenderer — JSON error envelope', () => {
+  let stdout: InMemoryWriter;
+
+  function jsonRenderer(): ReturnType<typeof createRenderer<Demo>> {
+    return createRenderer<Demo>({
+      output: 'json',
+      stdout: stdout.writer,
+      color: false,
+      table: demoTable,
+    });
+  }
+
+  beforeEach(() => {
+    stdout = createInMemoryWriter();
+  });
+
+  // T6
+  it('renders NotFoundError as code:NOT_FOUND, exitCode:3', () => {
+    jsonRenderer().renderError(new NotFoundError('index', 'foo'));
+
+    const parsed = JSON.parse(stdout.toString().slice(0, -1)) as unknown;
+    expect(parsed).toEqual({
+      ok: false,
+      error: { code: 'NOT_FOUND', message: 'index not found: foo' },
+      exitCode: 3,
+    });
+  });
+
+  // T7
+  it('renders UsageError as code:USAGE, exitCode:2', () => {
+    jsonRenderer().renderError(new UsageError('bad'));
+
+    const parsed = JSON.parse(stdout.toString().slice(0, -1)) as unknown;
+    expect(parsed).toEqual({
+      ok: false,
+      error: { code: 'USAGE', message: 'bad' },
+      exitCode: 2,
+    });
+  });
+
+  // T8: the base CliError tokenizes to a single token after the _ERROR strip.
+  it('renders base CliError as code:CLI with caller-supplied exitCode', () => {
+    jsonRenderer().renderError(new CliError('x', 7));
+
+    const parsed = JSON.parse(stdout.toString().slice(0, -1)) as unknown;
+    expect(parsed).toEqual({
+      ok: false,
+      error: { code: 'CLI', message: 'x' },
+      exitCode: 7,
+    });
+  });
+
+  // T9: non-CliError errors are hard-coded INTERNAL / exitCode:1; D7 rule is not applied.
+  it('renders a non-CliError as code:INTERNAL, exitCode:1', () => {
+    jsonRenderer().renderError(new Error('boom'));
+
+    const parsed = JSON.parse(stdout.toString().slice(0, -1)) as unknown;
+    expect(parsed).toEqual({
+      ok: false,
+      error: { code: 'INTERNAL', message: 'boom' },
+      exitCode: 1,
+    });
   });
 });

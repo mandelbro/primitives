@@ -1,5 +1,6 @@
 import { Chalk } from 'chalk';
 import Table from 'cli-table3';
+import { CliError } from './errors.js';
 
 export type OutputFormat = 'table' | 'json';
 
@@ -29,6 +30,24 @@ export interface Renderer<T> {
   renderError(err: Error): void;
 }
 
+/**
+ * Per spec §D7: PascalCase → SCREAMING_SNAKE → strip trailing _ERROR
+ * iff at least one character precedes the underscore. Applied only to
+ * CliError subclass names; non-CliError errors are hard-coded INTERNAL/1.
+ */
+function classifyError(err: Error): { code: string; exitCode: number } {
+  if (!(err instanceof CliError)) {
+    return { code: 'INTERNAL', exitCode: 1 };
+  }
+  const snake = err.name.replace(/(?<!^)[A-Z]/g, '_$&').toUpperCase();
+  const suffix = '_ERROR';
+  const code =
+    snake.endsWith(suffix) && snake.length > suffix.length
+      ? snake.slice(0, -suffix.length)
+      : snake;
+  return { code, exitCode: err.exitCode };
+}
+
 export function createRenderer<T>(opts: RendererOptions<T>): Renderer<T> {
   return {
     render(data: T): void {
@@ -46,8 +65,18 @@ export function createRenderer<T>(opts: RendererOptions<T>): Renderer<T> {
       table.push([...opts.table.row(data)]);
       opts.stdout.write(table.toString() + '\n');
     },
-    renderError(_err: Error): void {
-      throw new Error('renderError not yet implemented');
+    renderError(err: Error): void {
+      const { code, exitCode } = classifyError(err);
+      if (opts.output === 'json') {
+        const envelope: Envelope<T> = {
+          ok: false,
+          error: { code, message: err.message },
+          exitCode,
+        };
+        opts.stdout.write(JSON.stringify(envelope) + '\n');
+        return;
+      }
+      throw new Error('table-mode renderError not yet implemented');
     },
   };
 }
