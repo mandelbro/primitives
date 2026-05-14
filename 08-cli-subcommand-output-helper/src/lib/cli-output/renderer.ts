@@ -76,7 +76,8 @@ export function createRenderer<T>(opts: RendererOptions<T>): Renderer<T> {
         opts.stdout.write(JSON.stringify(envelope) + '\n');
         return;
       }
-      throw new Error('table-mode renderError not yet implemented');
+      // R5: table-mode errors write a single colorless line to stdout
+      opts.stdout.write(`error [${code}]: ${err.message}\n`);
     },
   };
 }

@@ -1,5 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Writable } from 'node:stream';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createRenderer, type TableFormat } from '../renderer.js';
 import { CliError, NotFoundError, UsageError } from '../errors.js';
 
@@ -208,5 +210,113 @@ describe('createRenderer — JSON error envelope', () => {
       error: { code: 'INTERNAL', message: 'boom' },
       exitCode: 1,
     });
+  });
+});
+
+describe('createRenderer — table-mode errors', () => {
+  let stdout: InMemoryWriter;
+
+  function tableRenderer(): ReturnType<typeof createRenderer<Demo>> {
+    return createRenderer<Demo>({
+      output: 'table',
+      stdout: stdout.writer,
+      color: false,
+      table: demoTable,
+    });
+  }
+
+  beforeEach(() => {
+    stdout = createInMemoryWriter();
+  });
+
+  // T10
+  it('writes "error [NOT_FOUND]: <msg>\\n" on stdout for a NotFoundError', () => {
+    tableRenderer().renderError(new NotFoundError('index', 'foo'));
+
+    const out = stdout.toString();
+    expect(out).toBe('error [NOT_FOUND]: index not found: foo\n');
+    expect(out).not.toMatch(/\x1b\[/);
+  });
+
+  // T10b
+  it('writes "error [INTERNAL]: <msg>\\n" on stdout for a non-CliError', () => {
+    tableRenderer().renderError(new Error('boom'));
+
+    expect(stdout.toString()).toBe('error [INTERNAL]: boom\n');
+  });
+});
+
+describe('createRenderer — boundary invariants', () => {
+  let stdout: InMemoryWriter;
+  let stderr: InMemoryWriter;
+
+  beforeEach(() => {
+    stdout = createInMemoryWriter();
+    stderr = createInMemoryWriter();
+  });
+
+  // T11
+  it('never writes to stderr in either render or renderError', () => {
+    for (const output of ['json', 'table'] as const) {
+      const r = createRenderer<Demo>({
+        output,
+        stdout: stdout.writer,
+        color: false,
+        table: demoTable,
+      });
+      r.render({ name: 'alpha', count: 3 });
+      r.renderError(new NotFoundError('index', 'foo'));
+      r.renderError(new Error('boom'));
+    }
+
+    expect(stderr.toString()).toBe('');
+  });
+});
+
+describe('createRenderer — D15 env-independence', () => {
+  let stdout: InMemoryWriter;
+
+  beforeEach(() => {
+    stdout = createInMemoryWriter();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  // T12 (a): static check — renderer.ts source must not reference process.*
+  it('source contains no `process.` references and no node:process import', () => {
+    const rendererSrcPath = fileURLToPath(new URL('../renderer.ts', import.meta.url));
+    const src = readFileSync(rendererSrcPath, 'utf8');
+
+    expect(src).not.toMatch(/\bprocess\./);
+    expect(src).not.toMatch(/from\s+['"](?:node:)?process['"]/);
+  });
+
+  // T12 (b): runtime check — NO_COLOR has no effect on the renderer's output.
+  it('color:true emits ANSI even with NO_COLOR=1 set', () => {
+    vi.stubEnv('NO_COLOR', '1');
+    const r = createRenderer<Demo>({
+      output: 'table',
+      stdout: stdout.writer,
+      color: true,
+      table: demoTable,
+    });
+    r.render({ name: 'alpha', count: 3 });
+
+    expect(stdout.toString()).toMatch(/\x1b\[/);
+  });
+
+  it('color:false emits no ANSI even with NO_COLOR unset', () => {
+    vi.stubEnv('NO_COLOR', '');
+    const r = createRenderer<Demo>({
+      output: 'table',
+      stdout: stdout.writer,
+      color: false,
+      table: demoTable,
+    });
+    r.render({ name: 'alpha', count: 3 });
+
+    expect(stdout.toString()).not.toMatch(/\x1b\[/);
   });
 });
