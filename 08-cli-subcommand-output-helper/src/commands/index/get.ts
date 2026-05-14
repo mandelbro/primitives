@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import type { Index, IndexClient } from '../../__tests__/fixtures/index-client.js';
-import { CliError } from '../../lib/cli-output/errors.js';
+import { CliError, UsageError } from '../../lib/cli-output/errors.js';
 import {
   createRenderer,
   type OutputFormat,
@@ -36,6 +36,24 @@ export function createGetCommand(deps: GetCommandDeps): Command {
     .action(async (name: string) => {
       const fallback: OutputFormat = deps.isTTY ? 'table' : 'json';
       const resolved = deps.resolveOutput();
+
+      // D14: --output validation lives here, not in Commander. Commander's
+      // built-in .choices() would write to stderr and corrupt JSON-mode
+      // consumers (D5). Validate before the happy-path renderer is built so
+      // the bad value never reaches createRenderer.
+      if (resolved !== undefined && resolved !== 'table' && resolved !== 'json') {
+        const fallbackColor = !deps.noColor && deps.isTTY && fallback === 'table';
+        const fallbackRenderer = createRenderer<Index>({
+          output: fallback,
+          stdout: deps.stdout,
+          color: fallbackColor,
+          table: INDEX_TABLE,
+        });
+        fallbackRenderer.renderError(new UsageError(`invalid --output: ${String(resolved)}`));
+        process.exitCode = 2;
+        return;
+      }
+
       const format: OutputFormat = resolved ?? fallback;
       const color = !deps.noColor && deps.isTTY && format === 'table';
       const renderer = createRenderer<Index>({

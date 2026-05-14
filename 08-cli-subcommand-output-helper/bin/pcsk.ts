@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { CliError } from '../src/lib/cli-output/errors.js';
-
-// Round deliverable: once the candidate implements
-// `src/commands/index/get.ts`, uncomment the import and the
-// `program.addCommand(...)` line in `main()` below.
-//
-// import { createGetCommand } from '../src/commands/index/get.js';
-// import { createFakeIndexClient, DEFAULT_INDEX } from '../src/__tests__/fixtures/index-client.js';
+import { createGetCommand } from '../src/commands/index/get.js';
+import {
+  createFakeIndexClient,
+  DEFAULT_INDEX,
+} from '../src/__tests__/fixtures/index-client.js';
+import type { OutputFormat } from '../src/lib/cli-output/renderer.js';
 
 interface BinDependencies {
   stdout: NodeJS.WritableStream;
@@ -41,15 +40,16 @@ async function main(): Promise<void> {
   const program = new Command()
     .name('pcsk')
     .description('Pinecone developer CLI')
-    .version('0.0.0');
+    .version('0.0.0')
+    .option('--output <format>', 'output format: table | json');
 
-  // Round deliverable — attach subcommands here once implemented:
-  //
-  //   program.addCommand(createGetCommand({
-  //     ...deps,
-  //     client: createFakeIndexClient({ index: DEFAULT_INDEX }),
-  //   }));
-  void deps;
+  program.addCommand(
+    createGetCommand({
+      ...deps,
+      client: createFakeIndexClient({ index: DEFAULT_INDEX }),
+      resolveOutput: () => program.opts()['output'] as OutputFormat | undefined,
+    }),
+  );
 
   try {
     await program.parseAsync(process.argv);

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
@@ -9,6 +9,7 @@ import {
   createFakeIndexClient,
   DEFAULT_INDEX,
   type FakeClientOptions,
+  type IndexClient,
 } from '../../../__tests__/fixtures/index-client.js';
 import { createGetCommand } from '../get.js';
 import type { OutputFormat } from '../../../lib/cli-output/renderer.js';
@@ -208,4 +209,61 @@ describe('pcsk index get — cancellation + no-process.exit invariant', () => {
       expect(process.exitCode).toBe(130);
     });
   }
+});
+
+describe('pcsk index get — invalid --output validation', () => {
+  function buildWithSpy(opts: {
+    readonly isTTY: boolean;
+    readonly resolveOutput: () => OutputFormat | undefined;
+  }): {
+    readonly cmd: ReturnType<typeof createGetCommand>;
+    readonly getIndexSpy: ReturnType<typeof vi.fn>;
+  } {
+    const getIndexSpy = vi.fn(async (_name: string, _signal?: AbortSignal) => DEFAULT_INDEX);
+    const client: IndexClient = { getIndex: getIndexSpy };
+    const cmd = createGetCommand({
+      client,
+      stdout: harness.stdout.writer,
+      stderr: harness.stderr.writer,
+      isTTY: opts.isTTY,
+      noColor: true,
+      signal: new AbortController().signal,
+      resolveOutput: opts.resolveOutput,
+    });
+    return { cmd, getIndexSpy };
+  }
+
+  // G-T12: non-TTY → fallback is JSON. Envelope on stdout, exitCode 2, getIndex never called.
+  it('emits a USAGE envelope on stdout when --output is invalid and isTTY=false', async () => {
+    const { cmd, getIndexSpy } = buildWithSpy({
+      isTTY: false,
+      resolveOutput: () => 'yaml' as unknown as OutputFormat,
+    });
+    await cmd.parseAsync(['demo'], { from: 'user' });
+
+    const parsed = JSON.parse(harness.stdout.toString().slice(0, -1)) as {
+      ok: boolean;
+      error: { code: string; message: string };
+      exitCode: number;
+    };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('USAGE');
+    expect(parsed.error.message).toMatch(/invalid --output/i);
+    expect(parsed.exitCode).toBe(2);
+    expect(process.exitCode).toBe(2);
+    expect(getIndexSpy).not.toHaveBeenCalled();
+  });
+
+  // G-T13: TTY → fallback is table. `error [USAGE]: …` on stdout, exitCode 2, getIndex never called.
+  it('writes a USAGE error line on stdout when --output is invalid and isTTY=true', async () => {
+    const { cmd, getIndexSpy } = buildWithSpy({
+      isTTY: true,
+      resolveOutput: () => 'yaml' as unknown as OutputFormat,
+    });
+    await cmd.parseAsync(['demo'], { from: 'user' });
+
+    expect(harness.stdout.toString()).toBe('error [USAGE]: invalid --output: yaml\n');
+    expect(process.exitCode).toBe(2);
+    expect(getIndexSpy).not.toHaveBeenCalled();
+  });
 });
